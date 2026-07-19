@@ -1,0 +1,184 @@
+/* === Marconi Lab Deep Learning Course — Shared Stylesheet === */
+/* Design principles: Tufte-inspired, print-friendly, high readability */
+
+:root {
+  --bg: #fefef9;
+  --text: #1a1a1a;
+  --muted: #6b6b6b;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --border: #e5e7eb;
+  --code-bg: #f3f4f6;
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --font-body: 'Georgia', 'Times New Roman', serif;
+  --font-heading: 'Helvetica Neue', 'Arial', sans-serif;
+  --font-mono: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  --max-width: 720px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--text);
+  background: var(--bg);
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+/* Typography */
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 1.75em 0 0.5em;
+}
+h1 { font-size: 2rem; margin-top: 0; }
+h2 { font-size: 1.4rem; border-bottom: 2px solid var(--border); padding-bottom: 0.35em; }
+h3 { font-size: 1.15rem; }
+h4 { font-size: 1rem; color: var(--muted); }
+
+p { margin: 0.75em 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Code blocks */
+code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--code-bg);
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+}
+
+pre {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  line-height: 1.5;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1em 1.2em;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* Special callouts */
+.callout {
+  border-left: 4px solid var(--accent);
+  background: var(--accent-light);
+  padding: 0.75em 1em;
+  margin: 1.25em 0;
+  border-radius: 0 6px 6px 0;
+}
+
+.callout-lab {
+  border-left: 4px solid var(--success);
+  background: #ecfdf5;
+  padding: 0.75em 1em;
+  margin: 1.25em 0;
+  border-radius: 0 6px 6px 0;
+}
+
+.callout-warning {
+  border-left: 4px solid var(--warning);
+  background: #fffbeb;
+  padding: 0.75em 1em;
+  margin: 1.25em 0;
+  border-radius: 0 6px 6px 0;
+}
+
+/* Quiz */
+.quiz { margin: 1.5em 0; }
+.quiz-question {
+  font-weight: 600;
+  margin-bottom: 0.6em;
+}
+.quiz-option {
+  display: block;
+  padding: 0.5em 0.75em;
+  margin: 0.3em 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.quiz-option:hover { background: var(--accent-light); }
+.quiz-option.correct { background: #d1fae5; border-color: var(--success); }
+.quiz-option.incorrect { background: #fee2e2; border-color: var(--danger); }
+.quiz-feedback {
+  margin-top: 0.5em;
+  padding: 0.5em 0.75em;
+  border-radius: 6px;
+  font-size: 0.9em;
+  display: none;
+}
+.quiz-feedback.show { display: block; }
+.quiz-feedback.correct { background: #ecfdf5; color: var(--success); }
+.quiz-feedback.incorrect { background: #fef2f2; color: var(--danger); }
+
+/* Checklist */
+.checklist { list-style: none; margin: 1em 0; }
+.checklist li { padding: 0.3em 0; }
+.checklist li::before {
+  content: "☐ ";
+  color: var(--muted);
+  margin-right: 0.4em;
+}
+
+/* Navigation */
+nav.lesson-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75em 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: 2em 0 1em;
+  font-size: 0.9em;
+}
+nav.lesson-nav a { color: var(--accent); }
+
+/* Footer */
+.lesson-footer {
+  margin-top: 3em;
+  padding-top: 1em;
+  border-top: 1px solid var(--border);
+  font-size: 0.85em;
+  color: var(--muted);
+}
+
+/* Responsive images */
+img { max-width: 100%; height: auto; }
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 0.9em;
+}
+th, td {
+  padding: 0.5em 0.75em;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+th { font-family: var(--font-heading); font-weight: 600; background: var(--code-bg); }
+
+/* Print */
+@media print {
+  body { font-size: 12pt; padding: 1cm; }
+  pre { page-break-inside: avoid; }
+  .quiz-option { cursor: default; }
+}

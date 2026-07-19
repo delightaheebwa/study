@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="pbl-domain" content="llm-fundamentals">
+<title>0001: BPE Tokenizer from Scratch</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<nav class="lesson-nav">
+  <a href="../index.html">← Curriculum</a>
+  <span>Lesson 0001</span>
+  <a href="../lessons/0002-embeddings.html">Next →</a>
+</nav>
+
+<h1>BPE Tokenizer from Scratch</h1>
+
+<p class="callout"><strong>Motto:</strong> A tokenizer is the bridge between raw text and the numbers a neural network can process. Build it once, and you'll never treat tokenizers as magic again.</p>
+
+<h2>The Problem</h2>
+<p>You want a language model to process the sentence: <code>"The lower the learning rate, the lower the loss."</code></p>
+<p>A neural network can't eat characters or words — it eats numbers. Each token needs a unique integer ID. But how do you decide what counts as a "token"?</p>
+
+<ul>
+  <li><strong>Word-level:</strong> <code>["The", "lower", "the", "learning", "rate", "the", "loss"]</code> — vocabulary explodes (~170k words in English). Misspellings and new words get <code>[UNK]</code>.</li>
+  <li><strong>Character-level:</strong> <code>["T","h","e"," ","l","o","w","e","r",...]</code> — tiny vocab (26+), but sequences get 10x longer, making it harder for the model to learn long-range patterns.</li>
+</ul>
+
+<p class="callout-warning"><strong>The tradeoff:</strong> Big tokens (words) → short sequences but huge vocabulary. Small tokens (characters) → tiny vocabulary but long sequences. We need something in between.</p>
+
+<h2>The Concept: Byte-Pair Encoding</h2>
+<p>BPE starts with characters and iteratively merges the <strong>most frequent pair</strong> of adjacent tokens. The result is a <strong>subword vocabulary</strong> — common words stay whole, rare words are split into familiar pieces.</p>
+
+<div class="mermaid">
+flowchart LR
+  A["c h a r a c t e r"] --> B["c h <strong>ar</strong> a c t e r"]
+  B --> C["<strong>ch</strong> ar a c t e r"]
+  C --> D["ch ar a c <strong>te</strong> r"]
+  D --> E["ch ar <strong>ac</strong> te r"]
+  E --> F["ch ar ac te r"]
+  F --> G["char ac ter"]
+  G --> H["character"]
+</div>
+
+<p style="text-align:center;font-style:italic;color:#999;font-size:0.9rem">Figure: BPE merges the most frequent pair at each step. <code>"character"</code> emerges from <code>c + h → ch</code>, <code>a + r → ar</code>, <code>t + e → te</code>, etc.</p>
+
+<h2>Build It: BPE from Scratch</h2>
+<p>Let's implement BPE in ~60 lines of Python. We'll train on a tiny corpus so you can see every merge.</p>
+
+<h3>Step 1: Pre-tokenize (split into words with spaces)</h3>
+<pre><code class="language-python">corpus = [
+    "the lower the learning rate the lower the loss",
+    "learn to lower the learning rate",
+    "the lowest loss is the goal"
+]
+
+def pre_tokenize(text):
+    """Split on whitespace and add word-boundary marker '</w>'."""
+    return [list(word) + ["</w>"] for word in text.split()]
+
+pretokenized = [pre_tokenize(s) for s in corpus]
+# [['t','h','e','</w>'], ['l','o','w','e','r','</w>'], ...]
+</code></pre>
+
+<h3>Step 2: Count pair frequencies</h3>
+<pre><code class="language-python">from collections import Counter
+
+def get_pair_counts(pretokenized):
+    """Count every adjacent pair of tokens across the corpus."""
+    counts = Counter()
+    for sentence in pretokenized:
+        for word in sentence:
+            for i in range(len(word) - 1):
+                counts[(word[i], word[i+1])] += 1
+    return counts
+
+pair_counts = get_pair_counts(pretokenized)
+# Most frequent pair: ('l', 'o') appears how many times?
+</code></pre>
+
+<div class="quiz" id="quiz-1" data-correct="1">
+  <h3>Quick Check</h3>
+  <p class="question">In the corpus above, which adjacent pair appears most frequently?</p>
+  <span class="option" data-idx="0">('t', 'h') — "th" appears in "the" (3x)</span>
+  <span class="option" data-idx="1">('l', 'o') — "lo" appears in "lower" + "lowest" + "loss" = 5 occurrences</span>
+  <span class="option" data-idx="2">('e', 'r') — "er" appears in "lower" + "learning"</span>
+  <span class="option" data-idx="3">('a', 'r') — "ar" appears in "rate" (2x)</span>
+  <div class="feedback"></div>
+</div>
+
+<h3>Step 3: Merge the best pair</h3>
+<pre><code class="language-python">def merge_pair(pretokenized, pair):
+    """Merge every occurrence of (a, b) into a new token 'ab'."""
+    a, b = pair
+    merged = []
+    for sentence in pretokenized:
+        new_sentence = []
+        for word in sentence:
+            new_word = []
+            i = 0
+            while i < len(word):
+                if i < len(word) - 1 and word[i] == a and word[i+1] == b:
+                    new_word.append(a + b)
+                    i += 2
+                else:
+                    new_word.append(word[i])
+                    i += 1
+            new_sentence.append(new_word)
+        merged.append(new_sentence)
+    return merged
+</code></pre>
+
+<h3>Step 4: The full BPE training loop</h3>
+<pre><code class="language-python">def train_bpe(corpus, vocab_size=20):
+    pretokenized = [pre_tokenize(s) for s in corpus]
+    vocab = set()
+    merges = []
+
+    # Collect initial characters
+    for sentence in pretokenized:
+        for word in sentence:
+            for char in word:
+                vocab.add(char)
+
+    while len(vocab) < vocab_size:
+        counts = get_pair_counts(pretokenized)
+        if not counts:
+            break
+        best_pair = counts.most_common(1)[0][0]
+        merges.append(best_pair)
+        pretokenized = merge_pair(pretokenized, best_pair)
+        new_token = best_pair[0] + best_pair[1]
+        vocab.add(new_token)
+        print(f"Merge {len(merges)}: {best_pair} → '{new_token}' (freq: {counts[best_pair]})")
+
+    return merges, pretokenized
+
+merges, tokenized = train_bpe(corpus, vocab_size=30)
+</code></pre>
+
+<h3>Step 5: Encode new text using the learned merges</h3>
+<pre><code class="language-python">def encode(text, merges):
+    """Apply learned merges to tokenize new text."""
+    words = pre_tokenize(text)
+    for word in words:
+        while True:
+            stats = Counter()
+            for i in range(len(word) - 1):
+                stats[(word[i], word[i+1])] = 1
+            # Find the first merge in our list that applies
+            best = None
+            for pair in merges:
+                if pair in stats:
+                    best = pair
+                    break
+            if best is None:
+                break
+            # Apply merge
+            a, b = best
+            new_word = []
+            i = 0
+            while i < len(word):
+                if i < len(word) - 1 and word[i] == a and word[i+1] == b:
+                    new_word.append(a + b)
+                    i += 2
+                else:
+                    new_word.append(word[i])
+                    i += 1
+            word = new_word
+    return word
+
+tokens = encode("lowest loss", merges)
+print(tokens)  # ['low', 'est', '</w>', 'lo', 'ss', '</w>']
+</code></pre>
+
+<div class="callout-lab"><strong>Try it:</strong> Run this in a Colab notebook or local Python. Print the merge sequence — you'll see how "lo" + "wer" → "lower" emerges naturally from raw frequency statistics.</div>
+
+<h3>Step 6: Build the token-to-ID mapping</h3>
+<pre><code class="language-python">def build_vocab(merges, special_tokens=["[PAD]", "[UNK]", "[CLS]", "[SEP]"]):
+    """Assign integer IDs to every token in the vocabulary."""
+    tokens = list(special_tokens)
+    seen = set(tokens)
+    for a, b in merges:
+        t = a + b
+        if t not in seen:
+            tokens.append(t)
+            seen.add(t)
+    return {t: i for i, t in enumerate(tokens)}
+
+vocab = build_vocab(merges)
+print(vocab)
+# {'[PAD]': 0, '[UNK]': 1, '[CLS]': 2, '[SEP]': 3, 't': 4, 'h': 5, ...}
+</code></pre>
+
+<h2>Use It: HuggingFace Tokenizers Library</h2>
+<p>Now that you understand how BPE works internally, let's use the production-grade library:</p>
+
+<pre><code class="language-bash">pip install tokenizers
+</code></pre>
+
+<pre><code class="language-python">from tokenizers import Tokenizer, models, trainers, pre_tokenizers
+
+# BPE model
+tokenizer = Tokenizer(models.BPE())
+tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=True)
+
+trainer = trainers.BpeTrainer(vocab_size=30000, special_tokens=["[PAD]", "[UNK]", "[CLS]", "[SEP]"])
+tokenizer.train_from_iterator(corpus, trainer)
+
+output = tokenizer.encode("the lower the learning rate")
+print(output.tokens)
+# ['the', 'Ġlower', 'Ġthe', 'Ġlearning', 'Ġrate']
+print(output.ids)
+# [1234, 5678, 1234, 9101, 1121]
+</code></pre>
+
+<p class="callout"><strong>What changed?</strong> The library version adds a <code>Ġ</code> prefix to indicate a space-preceded token (so "lower" mid-sentence differs from "Lower" capitalized). Your from-scratch version used <code>&lt;/w&gt;</code>. Same idea, different convention.</p>
+
+<h2>Ship It: Your BPE Skill</h2>
+<p>You now understand tokenization deeply. Here's a reusable skill definition for your agent:</p>
+
+<pre><code class="language-markdown">---
+name: bpe-tokenizer
+description: Train and use a BPE tokenizer from scratch
+phase: 10
+lesson: 01
+---
+
+Given a corpus and a desired vocabulary size, train a BPE tokenizer:
+1. Pre-tokenize by splitting on whitespace, marking word boundaries
+2. Count adjacent pair frequencies across the corpus
+3. Merge the most frequent pair
+4. Repeat until vocabulary reaches target size
+5. Store the merge-ordered list for encoding new text
+6. Assign integer IDs to each token in the vocabulary, reserving special tokens for [PAD], [UNK], [CLS], [SEP]
+</code></pre>
+
+<div class="quiz" id="quiz-2" data-correct="1">
+  <h3>Final Check</h3>
+  <p class="question">After training BPE on "low low lower", what's the first merge?</p>
+  <span class="option" data-idx="0">('l', 'o') — appears in "low" (3x)</span>
+  <span class="option" data-idx="1">('o', 'w') — appears in "low" + "low" + "low" = 3x — wait it's the same as ('l','o')...</span>
+  <span class="option" data-idx="2">('l', 'o') and ('o', 'w') both appear 3 times. The tiebreaker is arbitrary — either is correct.</span>
+  <div class="feedback"></div>
+</div>
+
+<h3>Key Takeaways</h3>
+<ul>
+  <li>BPE finds the optimal subword vocabulary for your corpus via frequency statistics</li>
+  <li>Tokenization is lossless — you can reconstruct the original text from token IDs</li>
+  <li>Special tokens must be reserved <em>before</em> training so their IDs don't conflict</li>
+  <li>Modern tokenizers (GPT-4, Claude, Llama 3) use variants like SentencePiece or Unigram, but they share the same core idea: subword merging</li>
+</ul>
+
+<nav class="lesson-nav">
+  <a href="../index.html">← Curriculum</a>
+  <a href="#">↑ Top</a>
+  <a href="../lessons/0002-embeddings.html">Next: Token Embeddings →</a>
+</nav>
+
+<footer class="lesson-footer">
+  <p>PBL AI Engineering · Lesson 0001 · BPE Tokenizer from Scratch</p>
+  <p>Sources: <a href="https://arxiv.org/abs/1508.07909">Neural Machine Translation of Rare Words with Subword Units (Sennrich et al., 2016)</a></p>
+</footer>
+
+<script src="../assets/quiz.js"></script>
+<script src="../assets/deps.js"></script>
+<script src="../assets/sidebar.js"></script>
+</body>
+</html>

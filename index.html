@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="pbl-domain" content="curriculum">
+<title>PBL AI Engineering — Curriculum</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+body { max-width: 860px; }
+.card { background: #1e1e36; border: 1px solid #333; border-radius: 8px; padding: 16px 20px; margin: 12px 0; }
+.card h3 { margin-top: 0; color: #ff6b6b; }
+.card .meta { font-size: 0.8rem; color: #999; margin-bottom: 8px; }
+.card .status { color: #66bb6a; }
+.phase-group { margin: 24px 0; }
+.phase-group h2 { border-bottom-color: #555; }
+</style>
+</head>
+<body>
+
+<h1>PBL AI Engineering — Curriculum</h1>
+<p>Project-based learning. 26 sequences. ~720 hours. Build from scratch.</p>
+
+<div id="pbl-status"></div>
+
+<div class="phase-group">
+<h2>🏗 Foundation</h2>
+<div class="card">
+  <div class="meta">Seq 1 · Track B: LLM from Scratch · ~30h</div>
+  <h3><a href="lessons/0001-bpe-tokenizer.html">0001: BPE Tokenizer from Scratch</a></h3>
+  <p>Byte-Pair Encoding tokenizer — the foundation of all LLMs.</p>
+  <span class="status">→ Available now</span>
+</div>
+<div class="card">
+  <div class="meta">Seq 2 · Track F: Eval Infrastructure · ~9h</div>
+  <h3>0002-TBD: Evaluation metrics, perplexity, leaderboards</h3>
+  <p class="meta">Coming after 0001</p>
+</div>
+</div>
+
+<div class="phase-group">
+<h2>🧮 Classical ML</h2>
+<div class="card">
+  <div class="meta">Seq 3 · Capstone A: Customer Churn Prediction API · ~35h</div>
+  <h3>Customer Churn — Full MLOps Pipeline</h3>
+  <p>EDA, feature engineering, Optuna, SHAP, FastAPI, Docker, Evidently drift monitoring.</p>
+  <span class="status">Coming after foundation</span>
+</div>
+</div>
+
+<div class="phase-group">
+<h2>🔍 RAG Systems</h2>
+<div class="card">
+  <div class="meta">Seq 4-6 · Tracks E + Capstones 02, 08 · ~69h</div>
+  <h3>Advanced RAG → Codebase RAG → Production RAG Chatbot</h3>
+  <p>Chunking, hybrid retrieval, reranking, RAGAS eval, regulated-domain safety.</p>
+</div>
+</div>
+
+<div class="phase-group">
+<h2>🖼 Multimodal</h2>
+<div class="card">
+  <div class="meta">Seq 7-9 · Tracks D + Capstones 04, 12 · ~69h</div>
+  <h3>Vision-Language → Document QA → Video Understanding</h3>
+  <p>ViT, cross-attention, VLM pretraining, temporal grounding.</p>
+</div>
+</div>
+
+<div class="phase-group">
+<h2>🤖 Agents</h2>
+<div class="card">
+  <div class="meta">Seq 10-16 · Tracks A + Capstones 01, 16, 13, 06, 09, 10 · ~205h</div>
+  <h3>Agent Infrastructure → Coding Agent → GitHub Agent → MCP → DevOps → Migration → Multi-Agent SWE</h3>
+  <p>Agent loop, tool registry, MCP, plan-execute-verify, sandbox, multi-agent orchestration.</p>
+</div>
+</div>
+
+<div class="phase-group">
+<h2>🎤 Voice & Adaptive</h2>
+<div class="card">
+  <div class="meta">Seq 17-18 · Capstones 03, 17 · ~60h</div>
+  <h3>Real-Time Voice Assistant → Personal AI Tutor</h3>
+  <p>WebRTC, streaming ASR/TTS, VAD, knowledge tracing, Socratic policy.</p>
+</div>
+</div>
+
+<div class="phase-group">
+<h2>🧠 Reinforcement Learning</h2>
+<div class="card">
+  <div class="meta">Seq 19 · Capstone B: RL Ladder + RLHF · ~40h</div>
+  <h3>VPG → DQN → PPO → DDPG → RLHF on GPT-2</h3>
+  <p>Spinning Up + CS285 LLM RL. Colab-friendly.</p>
+</div>
+</div>
+
+<div class="phase-group">
+<h2>⚡ Training & Optimization</h2>
+<div class="card">
+  <div class="meta">Seq 20-22 · Tracks G + Capstones 07, 14 · ~74h</div>
+  <h3>Distributed Training → Fine-Tuning Pipeline → Speculative Decoding</h3>
+  <p>DDP, ZeRO, SFT, DPO, quantization, vLLM, EAGLE-3.</p>
+</div>
+</div>
+
+<div class="phase-group">
+<h2>🛡 Safety & Grand Finale</h2>
+<div class="card">
+  <div class="meta">Seq 23-26 · Tracks H, C + Capstones 15, 05 · ~87h</div>
+  <h3>Safety Gate → Constitutional Harness → Research Agent → Autonomous Research</h3>
+  <p>Jailbreak taxonomy, prompt injection, red-team range, AI-Scientist-v2 style.</p>
+</div>
+</div>
+
+<hr>
+<div class="card">
+  <h3>📊 Cross-cutting: Capstone 11 — LLM Observability Dashboard (~25h)</h3>
+  <p>OTLP ingest, ClickHouse, drift detection. Start after RAG, maintain throughout.</p>
+</div>
+
+<script>
+fetch('/api/reviews').then(r => r.json()).then(d => {
+  document.getElementById('pbl-status').innerHTML =
+    '<p>📚 <strong>' + (d.global_stats?.total_lessons_completed || 0) + '</strong> lessons completed · ' +
+    '<strong>' + (d.due?.length || 0) + '</strong> reviews due</p>';
+}).catch(() => {});
+</script>
+<script src="assets/deps.js"></script>
+<script src="assets/sidebar.js"></script>
+</body>
+</html>

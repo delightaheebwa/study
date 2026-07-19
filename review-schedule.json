@@ -1,0 +1,21 @@
+{
+  "lessons": {},
+  "global_stats": {
+    "total_lessons_completed": 0,
+    "avg_mastery": 0,
+    "lessons_due_review": 0,
+    "last_interleaving_check": null
+  },
+  "domains": {
+    "llm-fundamentals": { "related_domains": ["rag", "transformers", "classical-ml", "multimodal", "eval"], "lessons": [] },
+    "rag": { "related_domains": ["llm-fundamentals", "multimodal", "eval", "agents"], "lessons": [] },
+    "agents": { "related_domains": ["rag", "llm-fundamentals", "safety", "mcp", "voice"], "lessons": [] },
+    "classical-ml": { "related_domains": ["eval", "rag", "llm-fundamentals", "rl"], "lessons": [] },
+    "rl": { "related_domains": ["classical-ml", "llm-fundamentals", "safety"], "lessons": [] },
+    "multimodal": { "related_domains": ["rag", "llm-fundamentals", "voice"], "lessons": [] },
+    "safety": { "related_domains": ["agents", "rag", "rl", "llm-fundamentals"], "lessons": [] },
+    "eval": { "related_domains": ["classical-ml", "rag", "llm-fundamentals"], "lessons": [] },
+    "mcp": { "related_domains": ["agents"], "lessons": [] },
+    "voice": { "related_domains": ["multimodal", "agents", "llm-fundamentals"], "lessons": [] }
+  }
+}
