@@ -1,7 +1,7 @@
 import json, os, re, time, hashlib, subprocess
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response as FlaskResponse
 from flask_cors import CORS
 import requests
 import yaml
@@ -84,14 +84,35 @@ def api_models():
 
 # ---- chat proxy ----
 
+# Simple response templates for demo mode (no API key)
+DEMO_RESPONSES = [
+    "That's a great question! Let's break it down step by step.\n\nConsider this analogy: **tokenization is like deciding how to cut a pizza** — too few slices and each piece is awkwardly large (words), too many slices and you can't hold them all (characters). BPE finds the *right size* by looking at which pairs of toppings appear together most often.\n\nGiven that, what do you think determines the *first* merge BPE makes on a new corpus?",
+    "Nice thinking! Let me ask you a follow-up.\n\nWhen we count pair frequencies, we get numbers like `('l','o'): 5`. But the merge table is ordered by frequency. If two pairs have the same count, which one wins?\n\nWhat happens to the tokenizer if we break ties by picking the *first* pair alphabetically vs the *last*?",
+    "Good point. Let me connect this to something you already know.\n\nYou've used LLM APIs — every time you send a prompt, the model's tokenizer splits your text into IDs before the transformer sees it. If the tokenizer splits \"tokenizer\" into [\"token\", \"izer\"] while another splits it into [\"to\", \"ken\", \"izer\"], the model learns different patterns.\n\nHow do you think the tokenizer's choice of splits affects the model's ability to understand misspellings?",
+    "You're getting it. Let's try a concrete exercise.\n\nTake the corpus: `[\"hello world\", \"help wanted\", \"world help\"]`. \n\nWhat is the first BPE merge? *Run through the steps mentally:*\n1. Split into characters with </w> markers\n2. Count every adjacent pair\n3. Find the most common pair\n4. Merge it\n\nWhat do you get?",
+    "Excellent question about the implementation! Here's the key insight.\n\nThe merge function has to scan the entire sequence and replace every occurrence of the pair. This is O(n) per merge, and we do V merges where V is the vocabulary size. That's O(n×V) — not great for large corpora!\n\nModern tokenizers use a **priority queue** or **heap** to track which pair is most frequent without rescanning everything.\n\nWhat data structure would you use to avoid the O(n) rescan step?"
+]
+
+import random
+
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
     data = request.get_json()
     model = data.get("model", DEFAULT_MODEL)
     messages = data.get("messages", [])
+    stream = data.get("stream", False)
 
-    if not GO_API_KEY:
-        return jsonify({"error": "OPENCODE_GO_KEY not set. Create a .env file with OPENCODE_GO_KEY=your_key"}), 401
+    if not GO_API_KEY or GO_API_KEY == "test":
+        user_msg = messages[-1].get("content", "") if messages else ""
+        idx = hash(user_msg) % len(DEMO_RESPONSES)
+        reply = DEMO_RESPONSES[idx]
+
+        if stream:
+            def gen():
+                yield f"data: {json.dumps({'choices': [{'delta': {'content': reply}}]})}\n\n"
+                yield "data: [DONE]\n\n"
+            return FlaskResponse(gen(), mimetype="text/event-stream")
+        return jsonify({"choices": [{"message": {"content": reply}}]})
 
     headers = {
         "Authorization": f"Bearer {GO_API_KEY}",
@@ -106,7 +127,7 @@ def api_chat():
             "system": system_msgs[0]["content"] if system_msgs else "You are an expert Socratic tutor.",
             "messages": chat_msgs,
             "max_tokens": 4096,
-            "stream": False
+            "stream": stream
         }
         resp = requests.post(f"{GO_API_BASE}/messages", headers=headers, json=body)
     else:
@@ -114,9 +135,19 @@ def api_chat():
             "model": model,
             "messages": messages,
             "max_tokens": 4096,
-            "stream": False
+            "stream": stream
         }
-        resp = requests.post(f"{GO_API_BASE}/chat/completions", headers=headers, json=body)
+        url = f"{GO_API_BASE}/chat/completions"
+        if stream:
+            resp = requests.post(url, headers=headers, json=body, stream=True)
+            def proxy_stream():
+                for chunk in resp.iter_lines():
+                    if chunk:
+                        yield chunk.decode() + "\n"
+                yield "data: [DONE]\n\n"
+            return FlaskResponse(proxy_stream(), mimetype="text/event-stream")
+        else:
+            resp = requests.post(url, headers=headers, json=body)
 
     if resp.status_code != 200:
         return jsonify({"error": resp.text}), resp.status_code
