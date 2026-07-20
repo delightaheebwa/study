@@ -1,1 +1,11 @@
-{"interleaving_schedule":[]}
+{
+  "interleaving_schedule": [
+    {
+      "date": "2026-07-20",
+      "current_lesson": "test",
+      "current_domain": "llm-fundamentals",
+      "mix": [],
+      "rationale": "Connect llm-fundamentals concepts with related domains: rag, transformers, classical-ml"
+    }
+  ]
+}

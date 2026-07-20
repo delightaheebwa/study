@@ -1,4 +1,4 @@
-import json, os, re, time, hashlib, subprocess
+import json, os, re, time, subprocess, threading
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from flask import Flask, request, jsonify, send_from_directory, Response as FlaskResponse
@@ -12,18 +12,67 @@ load_dotenv()
 BASE = Path(__file__).parent
 GO_API_BASE = "https://opencode.ai/zen/go/v1"
 GO_API_KEY = os.environ.get("OPENCODE_GO_KEY", "")
-
-MODELS_OPENAI = [
-    "grok-4.5", "glm-5.2", "glm-5.1", "kimi-k3",
-    "kimi-k2.7-code", "kimi-k2.6", "deepseek-v4-pro",
-    "deepseek-v4-flash", "mimo-v2.5", "mimo-v2.5-pro"
-]
-MODELS_ANTHROPIC = [
-    "minimax-m3", "minimax-m2.7", "minimax-m2.5",
-    "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus"
-]
-ALL_MODELS = MODELS_OPENAI + MODELS_ANTHROPIC
 DEFAULT_MODEL = "deepseek-v4-flash"
+
+# Hardcoded catalog: protocol type, context window, pricing per 1M tokens
+HARDCODED_CATALOG = {
+    "grok-4.5":           {"endpoint": "openai", "ctx": 131072, "price_in": 2.00, "price_out": 6.00},
+    "glm-5.2":            {"endpoint": "openai", "ctx": 131072, "price_in": 1.40, "price_out": 4.40},
+    "glm-5.1":            {"endpoint": "openai", "ctx": 131072, "price_in": 1.40, "price_out": 4.40},
+    "kimi-k3":            {"endpoint": "openai", "ctx": 131072, "price_in": 3.00, "price_out": 15.00},
+    "kimi-k2.7-code":     {"endpoint": "openai", "ctx": 131072, "price_in": 0.95, "price_out": 4.00},
+    "kimi-k2.6":          {"endpoint": "openai", "ctx": 131072, "price_in": 0.95, "price_out": 4.00},
+    "deepseek-v4-pro":    {"endpoint": "openai", "ctx": 131072, "price_in": 0.435, "price_out": 0.87},
+    "deepseek-v4-flash":  {"endpoint": "openai", "ctx": 131072, "price_in": 0.14, "price_out": 0.28},
+    "mimo-v2.5":          {"endpoint": "openai", "ctx": 131072, "price_in": 0.14, "price_out": 0.28},
+    "mimo-v2.5-pro":      {"endpoint": "openai", "ctx": 131072, "price_in": 0.435, "price_out": 0.87},
+    "minimax-m3":         {"endpoint": "anthropic", "ctx": 131072, "price_in": 0.30, "price_out": 1.20},
+    "minimax-m2.7":       {"endpoint": "anthropic", "ctx": 131072, "price_in": 0.30, "price_out": 1.20},
+    "minimax-m2.5":       {"endpoint": "anthropic", "ctx": 131072, "price_in": 0.30, "price_out": 1.20},
+    "qwen3.7-max":        {"endpoint": "anthropic", "ctx": 131072, "price_in": 2.50, "price_out": 7.50},
+    "qwen3.7-plus":       {"endpoint": "anthropic", "ctx": 262144, "price_in": 0.40, "price_out": 1.60},
+    "qwen3.6-plus":       {"endpoint": "anthropic", "ctx": 262144, "price_in": 0.50, "price_out": 3.00},
+}
+
+def is_anthropic(model):
+    return HARDCODED_CATALOG.get(model, {}).get("endpoint") == "anthropic"
+
+# Live catalog cache: fetched from OpenCode API on startup
+_live_catalog = {}
+_live_catalog_ts = 0
+_CATALOG_TTL = 21600  # 6 hours
+
+def _fetch_live_catalog():
+    global _live_catalog, _live_catalog_ts
+    if not GO_API_KEY or GO_API_KEY == "test":
+        return
+    try:
+        url = f"{GO_API_BASE}/models"
+        headers = {"Authorization": f"Bearer {GO_API_KEY}"}
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            _live_catalog = {}
+            for m in data if isinstance(data, list) else data.get("data", data.get("models", [])):
+                mid = m.get("id", m.get("name", ""))
+                if mid:
+                    _live_catalog[mid] = {
+                        "endpoint": is_anthropic(mid),
+                        "ctx": m.get("context_window", m.get("max_context", 131072)),
+                        "price_in": m.get("pricing", {}).get("input", HARDCODED_CATALOG.get(mid, {}).get("price_in", 0)),
+                        "price_out": m.get("pricing", {}).get("output", HARDCODED_CATALOG.get(mid, {}).get("price_out", 0)),
+                    }
+            _live_catalog_ts = time.time()
+    except Exception:
+        pass
+
+def _get_catalog():
+    if time.time() - _live_catalog_ts > _CATALOG_TTL:
+        _fetch_live_catalog()
+    return _live_catalog if _live_catalog else HARDCODED_CATALOG
+
+# Start background catalog fetch
+threading.Thread(target=_fetch_live_catalog, daemon=True).start()
 
 DOMAIN_ADJACENCY = {
     "llm-fundamentals": ["rag", "transformers", "classical-ml", "multimodal", "eval"],
@@ -80,7 +129,9 @@ def reference(path):
 
 @app.route("/api/models", methods=["GET"])
 def api_models():
-    return jsonify({"models": ALL_MODELS, "default": DEFAULT_MODEL})
+    cat = _get_catalog()
+    models = [{"id": k, "ctx": v["ctx"], "price_in": v["price_in"], "price_out": v["price_out"]} for k, v in cat.items()]
+    return jsonify({"models": models, "default": DEFAULT_MODEL})
 
 # ---- chat proxy ----
 
@@ -104,27 +155,50 @@ def api_chat():
 
     if not GO_API_KEY or GO_API_KEY == "test":
         user_msg = messages[-1].get("content", "") if messages else ""
-        idx = hash(user_msg) % len(DEMO_RESPONSES)
-        reply = DEMO_RESPONSES[idx]
+        prompt_chars = sum(len(m.get("content", "")) for m in messages)
+        prompt_tokens = max(10, prompt_chars // 3)
+        reply = DEMO_RESPONSES[hash(user_msg) % len(DEMO_RESPONSES)]
+        completion_tokens = max(10, len(reply) // 3)
+        mock_usage = {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens, "total_tokens": prompt_tokens + completion_tokens}
 
         if stream:
             def gen():
-                yield f"data: {json.dumps({'choices': [{'delta': {'content': reply}}]})}\n\n"
+                chunks = [reply[i:i+30] for i in range(0, len(reply), 30)]
+                for chunk in chunks:
+                    yield f"data: {json.dumps({'choices': [{'delta': {'content': chunk}}], 'usage': mock_usage})}\n\n"
+                    time.sleep(0.02)
+                yield f"data: {json.dumps({'usage': mock_usage})}\n\n"
                 yield "data: [DONE]\n\n"
             return FlaskResponse(gen(), mimetype="text/event-stream")
-        return jsonify({"choices": [{"message": {"content": reply}}]})
+        return jsonify({"choices": [{"message": {"content": reply}}], "usage_est": mock_usage})
 
     headers = {
         "Authorization": f"Bearer {GO_API_KEY}",
         "Content-Type": "application/json"
     }
 
-    if model in MODELS_ANTHROPIC:
-        system_msgs = [m for m in messages if m.get("role") == "system"]
-        chat_msgs = [m for m in messages if m.get("role") != "system"]
+    cat = _get_catalog()
+    model_info = cat.get(model, cat.get(DEFAULT_MODEL, {}))
+    ctx = model_info.get("ctx", 131072)
+
+    # Cut messages to fit context window (leave room for completion)
+    MAX_CTX = int(ctx * 0.85)
+    kept = []
+    total_chars = 0
+    for m in reversed(messages):
+        c = len(m.get("content", ""))
+        if total_chars + c > MAX_CTX: break
+        kept.insert(0, m)
+        total_chars += c
+
+    prompt_tokens_est = total_chars // 3  # crude estimate
+
+    if model_info.get("endpoint") == "anthropic":
+        system_msgs = [m for m in kept if m.get("role") == "system"]
+        chat_msgs = [m for m in kept if m.get("role") != "system"]
         body = {
             "model": model,
-            "system": system_msgs[0]["content"] if system_msgs else "You are an expert Socratic tutor.",
+            "system": system_msgs[0]["content"] if system_msgs else "You are a helpful tutor.",
             "messages": chat_msgs,
             "max_tokens": 4096,
             "stream": stream
@@ -133,17 +207,18 @@ def api_chat():
     else:
         body = {
             "model": model,
-            "messages": messages,
+            "messages": kept,
             "max_tokens": 4096,
             "stream": stream
         }
         url = f"{GO_API_BASE}/chat/completions"
         if stream:
-            resp = requests.post(url, headers=headers, json=body, stream=True)
+            upstream = requests.post(url, headers=headers, json=body, stream=True)
             def proxy_stream():
-                for chunk in resp.iter_lines():
-                    if chunk:
-                        yield chunk.decode() + "\n"
+                for line in upstream.iter_lines():
+                    if line:
+                        decoded = line.decode()
+                        yield decoded + "\n"
                 yield "data: [DONE]\n\n"
             return FlaskResponse(proxy_stream(), mimetype="text/event-stream")
         else:
@@ -152,7 +227,12 @@ def api_chat():
     if resp.status_code != 200:
         return jsonify({"error": resp.text}), resp.status_code
 
-    return jsonify(resp.json())
+    result = resp.json()
+    usage = result.get("usage", {}) or {}
+    if not usage:
+        usage = {"prompt_tokens": prompt_tokens_est, "completion_tokens": 0, "total_tokens": prompt_tokens_est}
+    result["usage_est"] = usage
+    return jsonify(result)
 
 # ---- end session pipeline ----
 

@@ -2,4 +2,4 @@
 
 ## 2026-07-20
 - PBL workspace initialized
-
+- Completed `test` (llm-fundamentals)
